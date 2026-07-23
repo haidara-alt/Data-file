@@ -110,11 +110,55 @@
     border-radius:10px;padding:6px 10px;
     display:none;align-items:center;gap:8px;
     pointer-events:none;
+    transition:all .15s ease;
   }
   #turnHudArrow{font-size:20px;line-height:1;color:var(--amber);}
   #turnHudInfo{display:flex;flex-direction:column;gap:1px;}
   #turnHudText{font-size:11px;letter-spacing:0.06em;text-transform:uppercase;color:var(--paper);}
   #turnHudStep{font-size:10px;letter-spacing:0.04em;color:var(--muted);font-family:'SF Mono',ui-monospace,Menlo,monospace;}
+  #turnHudDist{font-size:10px;letter-spacing:0.02em;color:var(--amber);font-family:'SF Mono',ui-monospace,Menlo,monospace;}
+
+  /* ---- Drive mode: much bigger, top-anchored, easier to read at a glance ---- */
+  #turnHud.drive{
+    top:10px;left:50%;right:auto;transform:translateX(-50%);
+    padding:10px 20px;gap:14px;border-radius:14px;
+    box-shadow:0 4px 18px rgba(0,0,0,0.45);
+  }
+  #turnHud.drive #turnHudArrow{font-size:38px;}
+  #turnHud.drive #turnHudText{font-size:15px;}
+  #turnHud.drive #turnHudDist{font-size:13px;}
+
+  #driveBadge{
+    position:absolute;left:10px;top:10px;
+    background:rgba(28,35,33,0.9);color:var(--paper);
+    border:1px solid rgba(255,255,255,0.12);border-radius:10px;
+    padding:6px 10px;font-family:'SF Mono',ui-monospace,Menlo,monospace;
+    font-size:11px;display:none;flex-direction:column;align-items:center;gap:0;
+    pointer-events:none;
+  }
+  #driveBadge b{font-size:15px;color:var(--gps);line-height:1.1;}
+  #driveBadge span{font-size:9px;letter-spacing:0.06em;text-transform:uppercase;color:var(--muted);}
+
+  #offRouteBanner{
+    position:absolute;left:50%;bottom:14px;transform:translateX(-50%);
+    background:#b23a2e;color:#fff;padding:7px 14px;border-radius:20px;
+    font-size:12px;font-weight:600;letter-spacing:0.02em;
+    display:none;box-shadow:0 3px 12px rgba(0,0,0,0.4);pointer-events:none;
+  }
+
+  #recenterBtn{
+    position:absolute;right:10px;bottom:14px;
+    width:44px;height:44px;border-radius:50%;
+    background:var(--ink);color:var(--muted);border:1px solid rgba(255,255,255,0.18);
+    font-size:18px;display:none;align-items:center;justify-content:center;
+    cursor:pointer;box-shadow:0 2px 10px rgba(0,0,0,0.4);
+  }
+  #recenterBtn.hidden{display:none !important;}
+  #recenterBtn.show{display:flex;}
+  #recenterBtn.active{color:var(--gps);border-color:var(--gps);}
+
+  #gpsMarker.offroute{fill:#b23a2e;}
+  #gpsPulse.offroute{fill:#b23a2e;}
 
   /* ---- Results panel ---- */
   #panel{
@@ -206,6 +250,8 @@
     </div>
     <div id="buttons3">
       <button class="tool sub" id="btnGPS">GPS</button>
+      <button class="tool sub" id="btnFollow" disabled>Follow ⌖</button>
+      <button class="tool sub" id="btnVoice">🔊 Voice</button>
       <button class="tool sub" id="btnExport">Export</button>
       <label class="tool sub" id="btnImportLabel">Import<input type="file" id="importFile" accept=".json" style="display:none;"></label>
     </div>
@@ -216,20 +262,25 @@
 
   <div id="mapWrap">
     <svg id="map" viewBox="0 0 100 100" preserveAspectRatio="xMidYMid meet">
-      <path id="basePath" d=""></path>
-      <path id="selPath" d=""></path>
-      <path id="dupPath" d=""></path>
-      <rect id="selRect" x="0" y="0" width="0" height="0"></rect>
-      <path id="lassoPath" d=""></path>
-      <circle id="brushCursor" r="0"></circle>
-      <path id="routePath" d=""></path>
-      <circle id="gpsPulse" r="0"></circle>
-      <circle id="gpsMarker" r="5"></circle>
-      <circle id="startMarker" r="5"></circle>
-      <circle id="playMarker" r="9"></circle>
+      <g id="rotateGroup">
+        <path id="basePath" d=""></path>
+        <path id="selPath" d=""></path>
+        <path id="dupPath" d=""></path>
+        <rect id="selRect" x="0" y="0" width="0" height="0"></rect>
+        <path id="lassoPath" d=""></path>
+        <circle id="brushCursor" r="0"></circle>
+        <path id="routePath" d=""></path>
+        <circle id="gpsPulse" r="0"></circle>
+        <circle id="gpsMarker" r="5"></circle>
+        <circle id="startMarker" r="5"></circle>
+        <circle id="playMarker" r="9"></circle>
+      </g>
     </svg>
     <div id="hint">Draw an area, then set a start point, then hit Run.</div>
-    <div id="turnHud"><span id="turnHudArrow">↑</span><div id="turnHudInfo"><span id="turnHudText">Straight</span><span id="turnHudStep">Step –/–</span></div></div>
+    <div id="turnHud"><span id="turnHudArrow">↑</span><div id="turnHudInfo"><span id="turnHudText">Straight</span><span id="turnHudDist"></span><span id="turnHudStep">Step –/–</span></div></div>
+    <div id="driveBadge"><b id="driveSpeed">0</b><span>km/h</span></div>
+    <div id="offRouteBanner">Off route — head back to the marked streets</div>
+    <button id="recenterBtn" title="Re-center &amp; follow">⌖</button>
   </div>
 
   <div id="panel">
@@ -1067,6 +1118,48 @@
       const dy = py(currentCircuit[i+1])-py(currentCircuit[i]);
       edgeCum.push(edgeCum[edgeCum.length-1] + Math.hypot(dx,dy));
     }
+    buildRouteSamples(pathEl);
+    resetTurnAnnouncements();
+  }
+
+  // ================= Route sampling (for GPS snap-to-route) =================
+  // Units here are meters-ish (same scale used for the km stats), so a fixed
+  // step size in "units" below is effectively a fixed step in meters.
+  let routeSamples = [];
+  function buildRouteSamples(pathEl){
+    routeSamples = [];
+    const len = animLen;
+    if (!len) return;
+    const step = Math.max(len/1500, 3); // ~3m steps, capped at 1500 samples
+    for (let d=0; d<=len; d+=step){
+      const p = pathEl.getPointAtLength(d);
+      routeSamples.push({x:p.x, y:p.y, d});
+    }
+  }
+  // Finds the closest point on the route to (x,y). Returns {x,y,d,offset}
+  // where d is distance-along-route (meters) and offset is how far off the
+  // road the raw GPS fix is (meters) — used for the "off route" warning.
+  function nearestRoutePoint(x,y){
+    if (!routeSamples.length) return null;
+    let best=null, bestD2=Infinity;
+    for (const s of routeSamples){
+      const dx=s.x-x, dy=s.y-y, d2=dx*dx+dy*dy;
+      if (d2<bestD2){ bestD2=d2; best=s; }
+    }
+    if (!best) return null;
+    return {x:best.x, y:best.y, d:best.d, offset:Math.sqrt(bestD2)};
+  }
+  // Next real maneuver at/after a given step index, skipping "Straight" hops
+  // (a postman route re-uses lots of short segments; drivers only care about
+  // the next actual turn, not every street-to-street node).
+  function nextManeuverFrom(stepIdx){
+    for (let i=stepIdx; i<currentDirections.length; i++){
+      const dir = currentDirections[i];
+      if (dir==='Left' || dir==='Right' || dir==='U-turn'){
+        return {idx:i, dir, dist: edgeCum[i]};
+      }
+    }
+    return null;
   }
 
   function currentEdgeIndex(dist){
@@ -1078,12 +1171,35 @@
     return Math.min(lo, Math.max(currentDirections.length-1,0));
   }
 
-  function updateTurnHud(displayIdx){
+  const turnHudDist = document.getElementById('turnHudDist');
+  function fmtDist(m){
+    if (m < 0) m = 0;
+    return m < 950 ? Math.round(m/5)*5 + ' m' : (m/1000).toFixed(1) + ' km';
+  }
+  function updateTurnHud(displayIdx, distAlong){
     const dir = currentDirections[displayIdx];
     if(!dir) return;
     turnHud.style.display = 'flex';
+    // In drive mode, show the next *real* turn and how far to it rather
+    // than the raw next node — much easier to glance at while moving.
+    if (driveMode && typeof distAlong === 'number'){
+      const nm = nextManeuverFrom(displayIdx);
+      if (nm){
+        turnHudArrow.textContent = ARROW_MAP[nm.dir] || '↑';
+        turnHudText.textContent = nm.dir;
+        turnHudDist.textContent = 'in ' + fmtDist(nm.dist - distAlong);
+        maybeAnnounce(nm, nm.dist - distAlong);
+      } else {
+        turnHudArrow.textContent = '●';
+        turnHudText.textContent = 'Finish';
+        turnHudDist.textContent = fmtDist(Math.max(0, animLen - distAlong)) + ' left';
+      }
+      turnHudStep.textContent = '';
+      return;
+    }
     turnHudArrow.textContent = ARROW_MAP[dir] || '↑';
     turnHudText.textContent = dir;
+    turnHudDist.textContent = '';
     turnHudStep.textContent = 'Step '+(displayIdx+1)+'/'+currentDirections.length;
   }
 
@@ -1207,10 +1323,178 @@
     reader.readAsText(file);
   });
 
-  // ================= Live GPS location =================
+  // ================= Live GPS location + Drive mode =================
   const gpsMarkerEl = document.getElementById('gpsMarker');
   const gpsPulseEl = document.getElementById('gpsPulse');
+  const rotateGroupEl = document.getElementById('rotateGroup');
+  const btnFollow = document.getElementById('btnFollow');
+  const btnVoice = document.getElementById('btnVoice');
+  const recenterBtn = document.getElementById('recenterBtn');
+  const driveBadge = document.getElementById('driveBadge');
+  const driveSpeedEl = document.getElementById('driveSpeed');
+  const offRouteBanner = document.getElementById('offRouteBanner');
   let gpsWatchId = null;
+  let driveMode = false;       // camera follows + rotates + auto-zooms
+  let voiceOn = false;
+  let lastFix = null;          // {x,y,t} previous raw GPS fix, for heading/speed fallback
+  let smoothHeading = null;    // degrees, smoothed to avoid a jittery map
+  let smoothSpeed = 0;         // m/s, smoothed
+  let announced = {};          // stepIdx -> {150:bool, 30:bool}
+
+  function resetTurnAnnouncements(){ announced = {}; }
+
+  function maybeAnnounce(nm, distLeft){
+    if (!voiceOn || !nm) return;
+    const rec = announced[nm.idx] || (announced[nm.idx] = {});
+    const phrase = nm.dir==='U-turn' ? 'make a U-turn' : 'turn ' + nm.dir.toLowerCase();
+    if (!rec.f150 && distLeft <= 150){
+      rec.f150 = true;
+      speak('In ' + Math.round(distLeft/10)*10 + ' meters, ' + phrase + '.');
+    }
+    if (!rec.f30 && distLeft <= 30){
+      rec.f30 = true;
+      speak(phrase.charAt(0).toUpperCase()+phrase.slice(1) + ' now.');
+    }
+  }
+  function speak(text){
+    if (!('speechSynthesis' in window)) return;
+    try{
+      window.speechSynthesis.cancel();
+      const u = new SpeechSynthesisUtterance(text);
+      u.rate = 1.02;
+      window.speechSynthesis.speak(u);
+    }catch(e){/* ignore */}
+  }
+  btnVoice.onclick = function(){
+    voiceOn = !voiceOn;
+    btnVoice.classList.toggle('active', voiceOn);
+    if (!voiceOn && 'speechSynthesis' in window) window.speechSynthesis.cancel();
+  };
+
+  // ---- camera: recenters + rotates heading-up + zooms by speed ----
+  function normDeg360(d){ d = d%360; if(d<0) d+=360; return d; }
+  function angleLerp(from, to, t){
+    let diff = ((to-from+540)%360)-180;
+    return normDeg360(from + diff*t);
+  }
+  function zoomWidthForSpeed(speedMps){
+    const kmh = speedMps*3.6;
+    const w = 110 + kmh*7; // tighter view when slow/stopped, wider ahead-view when fast
+    return Math.max(90, Math.min(560, w));
+  }
+  function applyDriveCamera(gx, gy, headingDeg, speedMps){
+    const rect = document.getElementById('mapWrap').getBoundingClientRect();
+    const aspect = rect.height / rect.width || 1;
+    const w = zoomWidthForSpeed(speedMps);
+    const h = w*aspect;
+    // push the view ahead of the car so more of the upcoming road is visible,
+    // putting the car icon in the lower third of the screen rather than dead center
+    const headRad = headingDeg*Math.PI/180;
+    const lookAhead = h*0.28;
+    vb.w = w; vb.h = h;
+    vb.x = gx + Math.cos(headRad)*lookAhead - w/2;
+    vb.y = gy + Math.sin(headRad)*lookAhead - h/2;
+    applyVB();
+    // rotate the whole map so the direction of travel points to the top of the screen
+    rotateGroupEl.setAttribute('transform', 'rotate('+(-90-headingDeg).toFixed(2)+','+gx.toFixed(2)+','+gy.toFixed(2)+')');
+    // counter-rotate markers that must stay upright (readouts, not the road)
+    gpsMarkerEl.setAttribute('r', 5);
+  }
+  function clearDriveCamera(){
+    rotateGroupEl.removeAttribute('transform');
+  }
+
+  function setFollow(on){
+    driveMode = on;
+    btnFollow.classList.toggle('active', on);
+    recenterBtn.classList.toggle('active', on);
+    driveBadge.style.display = on ? 'flex' : 'none';
+    turnHud.classList.toggle('drive', on);
+    if (!on){
+      clearDriveCamera();
+      offRouteBanner.style.display = 'none';
+    }
+  }
+  btnFollow.onclick = function(){ setFollow(!driveMode); };
+  recenterBtn.onclick = function(){ setFollow(true); };
+
+  // manual dragging on the map exits follow mode (same behavior as most nav apps) —
+  // tap the recenter button to resume being auto-followed
+  svg.addEventListener('pointerdown', function(){
+    if (driveMode) setFollow(false);
+  });
+
+  function handleGPSFix(pos){
+    const {longitude, latitude, speed, heading} = pos.coords;
+    const p = proj(longitude, latitude);
+    const now = performance.now();
+
+    // speed: prefer the device's own reading, else derive from consecutive fixes
+    let mps = (typeof speed==='number' && speed!==null && speed>=0) ? speed : 0;
+    if ((!speed && speed!==0) && lastFix){
+      const dt = (now-lastFix.t)/1000;
+      if (dt>0.2){ mps = Math.hypot(p[0]-lastFix.x, p[1]-lastFix.y)/dt; }
+    }
+    smoothSpeed = smoothSpeed*0.7 + mps*0.3;
+
+    // heading: prefer device compass/course when actually moving; otherwise fall
+    // back to the bearing between fixes, and finally to the route's own direction
+    // of travel so the view doesn't spin around while stopped at a light
+    let headingDeg = null;
+    if (typeof heading==='number' && heading!==null && smoothSpeed>1.2) headingDeg = heading-90; // convert compass(0=N) to screen space(0=E)
+    else if (lastFix && smoothSpeed>0.6){
+      headingDeg = Math.atan2(p[1]-lastFix.y, p[0]-lastFix.x)*180/Math.PI;
+    }
+
+    let snapped = null;
+    if (currentCircuit && routeSamples.length){
+      snapped = nearestRoutePoint(p[0], p[1]);
+      if (headingDeg===null && snapped){
+        // stationary/no compass: point the map the way the road runs here
+        const ahead = routeSamples[Math.min(routeSamples.length-1, routeSamples.findIndex(s=>s.d>=snapped.d)+3)];
+        if (ahead) headingDeg = Math.atan2(ahead.y-snapped.y, ahead.x-snapped.x)*180/Math.PI;
+      }
+    }
+    if (headingDeg===null) headingDeg = smoothHeading!==null ? smoothHeading : -90;
+    smoothHeading = smoothHeading===null ? headingDeg : angleLerp(smoothHeading, headingDeg, 0.35);
+
+    // draw the raw GPS dot, and flag it if it's drifted off the marked route
+    const offRoute = snapped && snapped.offset > 35;
+    gpsMarkerEl.setAttribute('cx', p[0]);
+    gpsMarkerEl.setAttribute('cy', p[1]);
+    gpsPulseEl.setAttribute('cx', p[0]);
+    gpsPulseEl.setAttribute('cy', p[1]);
+    gpsPulseEl.setAttribute('r', Math.max(worldW,worldH)*0.004);
+    gpsMarkerEl.style.display='block';
+    gpsPulseEl.style.display='block';
+    gpsMarkerEl.classList.toggle('offroute', !!offRoute);
+    gpsPulseEl.classList.toggle('offroute', !!offRoute);
+    btnGPS.classList.add('active');
+    btnGPS.textContent='GPS ●';
+
+    driveSpeedEl.textContent = Math.round(smoothSpeed*3.6);
+
+    // drive progress: snap the route marker + progress bar + turn HUD to the
+    // car's real position along the route instead of the demo playback timer
+    if (snapped && currentDirections.length){
+      pauseAnim();
+      playMarker.setAttribute('cx', snapped.x);
+      playMarker.setAttribute('cy', snapped.y);
+      playMarker.style.display = 'block';
+      progressBar.style.width = (snapped.d/animLen*100)+'%';
+      routeEl0.style.strokeDashoffset = animLen - snapped.d;
+      const travelIdx = currentEdgeIndex(snapped.d);
+      const displayIdx = Math.min(travelIdx+1, currentDirections.length-1);
+      updateTurnHud(displayIdx, snapped.d);
+      offRouteBanner.style.display = (driveMode && offRoute) ? 'block' : 'none';
+    }
+
+    if (driveMode){
+      applyDriveCamera(p[0], p[1], smoothHeading, smoothSpeed);
+    }
+    lastFix = {x:p[0], y:p[1], t:now};
+  }
+
   function toggleGPS(){
     if(gpsWatchId!==null){
       navigator.geolocation.clearWatch(gpsWatchId);
@@ -1219,6 +1503,10 @@
       gpsPulseEl.style.display='none';
       btnGPS.classList.remove('active');
       btnGPS.textContent='GPS';
+      btnFollow.disabled = true;
+      recenterBtn.classList.remove('show');
+      setFollow(false);
+      lastFix = null; smoothHeading = null; smoothSpeed = 0;
       return;
     }
     if(!navigator.geolocation){
@@ -1227,21 +1515,13 @@
     }
     btnGPS.textContent='GPS…';
     gpsWatchId = navigator.geolocation.watchPosition(function(pos){
-      const {longitude, latitude} = pos.coords;
-      const p = proj(longitude, latitude);
-      gpsMarkerEl.setAttribute('cx', p[0]);
-      gpsMarkerEl.setAttribute('cy', p[1]);
-      gpsPulseEl.setAttribute('cx', p[0]);
-      gpsPulseEl.setAttribute('cy', p[1]);
-      gpsPulseEl.setAttribute('r', Math.max(worldW,worldH)*0.004);
-      gpsMarkerEl.style.display='block';
-      gpsPulseEl.style.display='block';
-      btnGPS.classList.add('active');
-      btnGPS.textContent='GPS ●';
+      handleGPSFix(pos);
+      btnFollow.disabled = false;
+      recenterBtn.classList.add('show');
     }, function(err){
       statusEl.textContent = 'Location error: '+err.message;
       btnGPS.textContent='GPS';
-    }, {enableHighAccuracy:true, maximumAge:2000, timeout:15000});
+    }, {enableHighAccuracy:true, maximumAge:1000, timeout:15000});
   }
   btnGPS.onclick = toggleGPS;
 
