@@ -88,6 +88,8 @@
   #routePath{fill:none;stroke:var(--route);stroke-width:3;stroke-linecap:round;stroke-linejoin:round;}
   #selRect{fill:var(--steel-soft);stroke:var(--steel);stroke-width:1.5;stroke-dasharray:5,4;pointer-events:none;}
   #brushCursor{fill:var(--steel-soft);stroke:var(--steel);stroke-width:1;pointer-events:none;display:none;}
+  #lassoPath{fill:none;stroke:var(--steel);stroke-linecap:round;stroke-linejoin:round;opacity:0.32;pointer-events:none;}
+  #lassoPath.erase{stroke:#b23a2e;}
   #startMarker{fill:var(--start);stroke:#0c3a19;stroke-width:1;display:none;}
   #playMarker{fill:var(--route);stroke:#fff;stroke-width:1.6;display:none;}
   #gpsMarker{fill:var(--gps);stroke:#fff;stroke-width:1.2;display:none;}
@@ -110,7 +112,9 @@
     pointer-events:none;
   }
   #turnHudArrow{font-size:20px;line-height:1;color:var(--amber);}
-  #turnHudText{font-size:11px;letter-spacing:0.06em;text-transform:uppercase;color:var(--muted);}
+  #turnHudInfo{display:flex;flex-direction:column;gap:1px;}
+  #turnHudText{font-size:11px;letter-spacing:0.06em;text-transform:uppercase;color:var(--paper);}
+  #turnHudStep{font-size:10px;letter-spacing:0.04em;color:var(--muted);font-family:'SF Mono',ui-monospace,Menlo,monospace;}
 
   /* ---- Results panel ---- */
   #panel{
@@ -123,6 +127,16 @@
     z-index:20;
   }
   #panel.open{max-height:70vh;padding:12px 14px 14px;overflow-y:auto;}
+  #panel.open.minimized{max-height:78px;overflow:hidden;}
+  #panel.minimized #stats, #panel.minimized #stepsSection{display:none;}
+  #panelHandle{display:flex;align-items:center;justify-content:space-between;margin-bottom:8px;}
+  #panelHandleLabel{font-size:11px;letter-spacing:0.08em;text-transform:uppercase;color:var(--muted);}
+  #btnMinimizePanel{
+    background:#262d2c;color:var(--paper);border:1px solid rgba(255,255,255,0.1);
+    border-radius:7px;width:24px;height:24px;font-size:12px;line-height:1;cursor:pointer;
+  }
+  #brushSizeRow{display:none;align-items:center;gap:10px;margin-top:2px;}
+  #brushSizeLabel{font-size:11px;color:var(--muted);white-space:nowrap;font-family:'SF Mono',ui-monospace,Menlo,monospace;}
   #stats{
     display:flex;
     gap:14px;
@@ -186,6 +200,10 @@
       <button class="tool sub active" id="btnPaintMode" style="display:none;">Paint</button>
       <button class="tool sub" id="btnEraseMode" style="display:none;">Erase</button>
     </div>
+    <div id="brushSizeRow">
+      <span id="brushSizeLabel">Brush size</span>
+      <input type="range" id="brushSizeSlider" min="10" max="90" value="26">
+    </div>
     <div id="buttons3">
       <button class="tool sub" id="btnGPS">GPS</button>
       <button class="tool sub" id="btnExport">Export</button>
@@ -202,6 +220,7 @@
       <path id="selPath" d=""></path>
       <path id="dupPath" d=""></path>
       <rect id="selRect" x="0" y="0" width="0" height="0"></rect>
+      <path id="lassoPath" d=""></path>
       <circle id="brushCursor" r="0"></circle>
       <path id="routePath" d=""></path>
       <circle id="gpsPulse" r="0"></circle>
@@ -210,10 +229,14 @@
       <circle id="playMarker" r="9"></circle>
     </svg>
     <div id="hint">Draw an area, then set a start point, then hit Run.</div>
-    <div id="turnHud"><span id="turnHudArrow">↑</span><span id="turnHudText">Straight</span></div>
+    <div id="turnHud"><span id="turnHudArrow">↑</span><div id="turnHudInfo"><span id="turnHudText">Straight</span><span id="turnHudStep">Step –/–</span></div></div>
   </div>
 
   <div id="panel">
+    <div id="panelHandle">
+      <span id="panelHandleLabel">Route ready</span>
+      <button id="btnMinimizePanel">▾</button>
+    </div>
     <div id="stats">
       <div><b id="statSteps">–</b><span>steps</span></div>
       <div><b id="statDist">–</b><span>route km</span></div>
@@ -397,6 +420,7 @@
     btnBrushMode.classList.toggle('active', s==='brush');
     btnPaintMode.style.display = s==='brush' ? '' : 'none';
     btnEraseMode.style.display = s==='brush' ? '' : 'none';
+    brushSizeRow.style.display = s==='brush' ? 'flex' : 'none';
     updateHint();
   }
   function setBrushAction(a){
@@ -425,13 +449,22 @@
   // ---- pointer drag: pan / draw area (rect or brush) / set start ----
   let dragging=false, dragStartClient=null, dragStartVB=null, rectStartSVG=null;
   let brushLastPoint=null;
+  let lassoPoints=[];
   const selRectEl = document.getElementById('selRect');
   const brushCursorEl = document.getElementById('brushCursor');
+  const lassoPathEl = document.getElementById('lassoPath');
+  const brushSizeRow = document.getElementById('brushSizeRow');
+  const brushSizeSlider = document.getElementById('brushSizeSlider');
+  let brushSizePx = parseInt(brushSizeSlider.value,10);
+  brushSizeSlider.addEventListener('input', function(){
+    brushSizePx = parseInt(brushSizeSlider.value,10);
+  });
 
   function brushRadiusSVG(){
     const rect = svg.getBoundingClientRect();
-    return 26 * (vb.w/rect.width);
+    return brushSizePx * (vb.w/rect.width);
   }
+  // near-path marking: gives immediate feedback for the brush's actual thickness
   function applyBrushAt(x,y){
     const r = brushRadiusSVG();
     const near = nodesNear(x,y,r);
@@ -464,6 +497,62 @@
     });
   }
 
+  // ---- lasso boundary: everything enclosed by the drawn loop gets marked too ----
+  function lassoPathD(){
+    if(lassoPoints.length===0) return '';
+    let d = 'M'+lassoPoints[0].x.toFixed(1)+','+lassoPoints[0].y.toFixed(1)+' ';
+    for(let i=1;i<lassoPoints.length;i++){
+      d += 'L'+lassoPoints[i].x.toFixed(1)+','+lassoPoints[i].y.toFixed(1)+' ';
+    }
+    return d + 'Z';
+  }
+  function updateLassoVisual(){
+    lassoPathEl.setAttribute('d', lassoPathD());
+    lassoPathEl.setAttribute('stroke-width', (brushRadiusSVG()*2).toFixed(2));
+    lassoPathEl.classList.toggle('erase', brushAction==='erase');
+  }
+  function pointInPolygon(x,y,poly){
+    let inside=false;
+    for(let i=0,j=poly.length-1;i<poly.length;j=i++){
+      const xi=poly[i].x, yi=poly[i].y, xj=poly[j].x, yj=poly[j].y;
+      const intersect = ((yi>y)!==(yj>y)) && (x < (xj-xi)*(y-yi)/(yj-yi)+xi);
+      if(intersect) inside=!inside;
+    }
+    return inside;
+  }
+  function nodesInsidePolygon(poly){
+    let minX=Infinity,maxX=-Infinity,minY=Infinity,maxY=-Infinity;
+    for(const p of poly){
+      if(p.x<minX)minX=p.x; if(p.x>maxX)maxX=p.x;
+      if(p.y<minY)minY=p.y; if(p.y>maxY)maxY=p.y;
+    }
+    const minCx=Math.floor(minX/GRID_CELL), maxCx=Math.floor(maxX/GRID_CELL);
+    const minCy=Math.floor(minY/GRID_CELL), maxCy=Math.floor(maxY/GRID_CELL);
+    const result=[];
+    for(let cx=minCx;cx<=maxCx;cx++){
+      for(let cy=minCy;cy<=maxCy;cy++){
+        const arr=grid.get(gridKey(cx,cy));
+        if(!arr) continue;
+        for(const i of arr){
+          if(pointInPolygon(px(i),py(i),poly)) result.push(i);
+        }
+      }
+    }
+    return result;
+  }
+  function finalizeBrushLasso(){
+    if(lassoPoints.length>=3){
+      const inside = nodesInsidePolygon(lassoPoints);
+      if(brushAction==='paint'){ inside.forEach(i=>brushNodeSet.add(i)); }
+      else { inside.forEach(i=>brushNodeSet.delete(i)); }
+    }
+    lassoPoints = [];
+    lassoPathEl.setAttribute('d','');
+    brushCursorEl.style.display='none';
+    applySelectionNodeSet(new Set(brushNodeSet), null);
+    resetRun();
+  }
+
   svg.addEventListener('pointerdown', function(e){
     svg.setPointerCapture(e.pointerId);
     dragging = true;
@@ -478,7 +567,9 @@
         selRectEl.setAttribute('height', 0);
       } else {
         brushLastPoint = clientToSVG(e.clientX, e.clientY);
+        lassoPoints = [{x:brushLastPoint.x, y:brushLastPoint.y}];
         applyBrushAt(brushLastPoint.x, brushLastPoint.y);
+        updateLassoVisual();
       }
     }
   });
@@ -506,8 +597,13 @@
         selRectEl.setAttribute('height', h);
       } else {
         const cur = clientToSVG(e.clientX, e.clientY);
+        const lastLp = lassoPoints[lassoPoints.length-1];
+        if(!lastLp || Math.hypot(cur.x-lastLp.x, cur.y-lastLp.y) > Math.max(brushRadiusSVG()*0.2, 0.0001)){
+          lassoPoints.push({x:cur.x, y:cur.y});
+        }
         applyBrushSegment(brushLastPoint, cur);
         brushLastPoint = cur;
+        updateLassoVisual();
       }
     }
   });
@@ -519,8 +615,7 @@
       if(areaShape==='rect'){
         finalizeAreaSelection();
       } else {
-        brushCursorEl.style.display='none';
-        resetRun();
+        finalizeBrushLasso();
       }
     } else if (mode==='start'){
       const p = clientToSVG(e.clientX, e.clientY);
@@ -923,6 +1018,9 @@
     document.getElementById('statStreets').textContent = (res.totalStreets/1000).toFixed(2);
     document.getElementById('statOverhead').textContent = (res.addedLength/res.totalStreets*100).toFixed(0)+'%';
     document.getElementById('panel').classList.add('open');
+    document.getElementById('panel').classList.remove('minimized');
+    panelMinimized = false;
+    btnMinimizePanel.textContent = '▾';
 
     renderStepsTable(computeDirections(currentCircuit));
     setupAnim(routeEl);
@@ -939,6 +1037,15 @@
   const turnHud = document.getElementById('turnHud');
   const turnHudArrow = document.getElementById('turnHudArrow');
   const turnHudText = document.getElementById('turnHudText');
+  const turnHudStep = document.getElementById('turnHudStep');
+  const panelEl = document.getElementById('panel');
+  const btnMinimizePanel = document.getElementById('btnMinimizePanel');
+  let panelMinimized = false;
+  btnMinimizePanel.onclick = function(){
+    panelMinimized = !panelMinimized;
+    panelEl.classList.toggle('minimized', panelMinimized);
+    btnMinimizePanel.textContent = panelMinimized ? '▲' : '▾';
+  };
 
   function setupAnim(pathEl){
     animLen = pathEl.getTotalLength();
@@ -971,11 +1078,13 @@
     return Math.min(lo, Math.max(currentDirections.length-1,0));
   }
 
-  function updateTurnHud(dir){
+  function updateTurnHud(displayIdx){
+    const dir = currentDirections[displayIdx];
     if(!dir) return;
     turnHud.style.display = 'flex';
     turnHudArrow.textContent = ARROW_MAP[dir] || '↑';
     turnHudText.textContent = dir;
+    turnHudStep.textContent = 'Step '+(displayIdx+1)+'/'+currentDirections.length;
   }
 
   function pauseAnim(){
@@ -1003,7 +1112,9 @@
     playMarker.setAttribute('cy', pt.y);
     progressBar.style.width = (dist/animLen*100)+'%';
     if(currentDirections.length){
-      updateTurnHud(currentDirections[currentEdgeIndex(dist)]);
+      const travelIdx = currentEdgeIndex(dist);
+      const displayIdx = Math.min(travelIdx+1, currentDirections.length-1);
+      updateTurnHud(displayIdx);
     }
     if (dist >= animLen){
       playing = false;
