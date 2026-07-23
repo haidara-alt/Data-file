@@ -308,7 +308,7 @@
   let startNode = null;
   let currentCircuit = null;
   let routeResult = null;
-  let instructions = data.instructions || [];
+  let instructions = [];
   let currentStepIndex = 0;
   let isPlaying = false;
   let paintedNodes = new Set();
@@ -684,7 +684,7 @@
     pauseAnim();
     currentCircuit = null;
     routeResult = null;
-    instructions = data.instructions || [];
+    instructions = [];
     currentStepIndex = 0;
     btnInstructions.disabled = true;
     btnRun.disabled = !(selection && startNode!==null);
