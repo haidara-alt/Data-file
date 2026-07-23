@@ -15,6 +15,7 @@
     --start:#2fa84f;
     --amber:#d98c2b;
     --muted:#8a8f92;
+    --gps:#2f7dd9;
   }
   *{box-sizing:border-box;}
   html,body{margin:0;padding:0;height:100%;overflow:hidden;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;background:var(--ink);color:var(--paper);}
@@ -30,6 +31,7 @@
     z-index:20;
     border-bottom:1px solid rgba(255,255,255,0.08);
   }
+  #titleRow{display:flex;align-items:center;justify-content:space-between;gap:8px;}
   #title{
     font-size:13px;
     letter-spacing:0.14em;
@@ -38,10 +40,20 @@
     font-weight:600;
   }
   #title span{color:var(--muted);text-transform:none;letter-spacing:0;font-weight:400;margin-left:8px;font-size:12px;}
-  #buttons{display:flex;gap:6px;flex-wrap:wrap;}
-  button.tool{
+  #btnCollapseBar{
+    background:#262d2c;color:var(--paper);border:1px solid rgba(255,255,255,0.1);
+    border-radius:7px;width:26px;height:26px;font-size:13px;line-height:1;cursor:pointer;flex:none;
+  }
+  #btnReopenBar{
+    position:fixed;top:10px;left:10px;z-index:60;
+    background:var(--ink);color:var(--amber);border:1px solid rgba(255,255,255,0.2);
+    border-radius:9px;padding:8px 12px;font-size:12px;font-weight:600;letter-spacing:0.02em;
+    cursor:pointer;display:none;box-shadow:0 2px 8px rgba(0,0,0,0.4);
+  }
+  #buttons,#buttons2,#buttons3{display:flex;gap:6px;flex-wrap:wrap;}
+  button.tool, label.tool{
     flex:1 1 auto;
-    min-width:74px;
+    min-width:70px;
     background:#262d2c;
     color:var(--paper);
     border:1px solid rgba(255,255,255,0.1);
@@ -52,11 +64,14 @@
     letter-spacing:0.02em;
     cursor:pointer;
     transition:background .15s, transform .1s;
+    display:inline-flex;align-items:center;justify-content:center;
+    text-align:center;
   }
-  button.tool:active{transform:scale(0.96);}
-  button.tool.active{background:var(--steel);border-color:var(--steel);}
+  button.tool:active, label.tool:active{transform:scale(0.96);}
+  button.tool.active, label.tool.active{background:var(--steel);border-color:var(--steel);}
   button.tool:disabled{opacity:0.35;cursor:not-allowed;}
   button.tool.danger{background:#3a1f1a;}
+  button.tool.sub{font-size:11px;padding:7px 6px;}
   #status{
     font-size:11.5px;
     color:var(--muted);
@@ -72,8 +87,11 @@
   #dupPath{fill:none;stroke:var(--amber);stroke-width:2.4;stroke-linecap:round;opacity:0.95;}
   #routePath{fill:none;stroke:var(--route);stroke-width:3;stroke-linecap:round;stroke-linejoin:round;}
   #selRect{fill:var(--steel-soft);stroke:var(--steel);stroke-width:1.5;stroke-dasharray:5,4;pointer-events:none;}
+  #brushCursor{fill:var(--steel-soft);stroke:var(--steel);stroke-width:1;pointer-events:none;display:none;}
   #startMarker{fill:var(--start);stroke:#0c3a19;stroke-width:1;display:none;}
-  #playMarker{fill:var(--route);stroke:#fff;stroke-width:1.2;display:none;}
+  #playMarker{fill:var(--route);stroke:#fff;stroke-width:1.6;display:none;}
+  #gpsMarker{fill:var(--gps);stroke:#fff;stroke-width:1.2;display:none;}
+  #gpsPulse{fill:var(--gps);opacity:0.35;display:none;}
 
   #hint{
     position:absolute;left:10px;bottom:10px;
@@ -81,6 +99,18 @@
     padding:8px 11px;border-radius:8px;font-size:12px;line-height:1.4;
     max-width:70%;pointer-events:none;
   }
+
+  /* ---- Turn HUD (small corner card) ---- */
+  #turnHud{
+    position:absolute;top:10px;right:10px;
+    background:rgba(28,35,33,0.9);color:var(--paper);
+    border:1px solid rgba(255,255,255,0.12);
+    border-radius:10px;padding:6px 10px;
+    display:none;align-items:center;gap:8px;
+    pointer-events:none;
+  }
+  #turnHudArrow{font-size:20px;line-height:1;color:var(--amber);}
+  #turnHudText{font-size:11px;letter-spacing:0.06em;text-transform:uppercase;color:var(--muted);}
 
   /* ---- Results panel ---- */
   #panel{
@@ -92,7 +122,7 @@
     transition:max-height .25s ease, padding .25s ease;
     z-index:20;
   }
-  #panel.open{max-height:220px;padding:12px 14px 14px;}
+  #panel.open{max-height:70vh;padding:12px 14px 14px;overflow-y:auto;}
   #stats{
     display:flex;
     gap:14px;
@@ -104,7 +134,7 @@
   }
   #stats div b{display:block;color:var(--amber);font-size:16px;font-weight:700;}
   #stats div span{color:var(--muted);font-size:10px;letter-spacing:0.08em;text-transform:uppercase;}
-  #playRow{display:flex;align-items:center;gap:10px;}
+  #playRow{display:flex;align-items:center;gap:10px;margin-bottom:10px;}
   #playBtn{
     background:var(--route);color:#fff;border:none;border-radius:50%;
     width:42px;height:42px;font-size:16px;cursor:pointer;flex:none;
@@ -114,12 +144,35 @@
   #progressBar{height:100%;width:0%;background:var(--route);}
   #speedLabel{font-size:11px;color:var(--muted);white-space:nowrap;font-family:'SF Mono',ui-monospace,Menlo,monospace;}
   input[type=range]{width:70px;}
+
+  /* ---- Steps table ---- */
+  #stepsSection{border-top:1px solid rgba(255,255,255,0.08);padding-top:8px;}
+  #stepsToggleBtn{
+    width:100%;text-align:left;background:none;border:none;color:var(--paper);
+    font-size:12px;font-weight:600;letter-spacing:0.02em;cursor:pointer;padding:4px 0;
+    display:flex;justify-content:space-between;align-items:center;
+  }
+  #stepsToggleBtn .chev{color:var(--muted);font-size:11px;}
+  #stepsTableWrap{max-height:0;overflow:hidden;transition:max-height .22s ease;}
+  #stepsTableWrap.open{max-height:170px;overflow-y:auto;}
+  #stepsTable{width:100%;border-collapse:collapse;font-size:12px;font-family:'SF Mono',ui-monospace,Menlo,monospace;}
+  #stepsTable th{
+    position:sticky;top:0;background:var(--ink);color:var(--muted);
+    text-align:left;font-weight:600;font-size:10px;text-transform:uppercase;letter-spacing:0.06em;
+    padding:4px 6px;border-bottom:1px solid rgba(255,255,255,0.1);
+  }
+  #stepsTable td{padding:4px 6px;border-bottom:1px solid rgba(255,255,255,0.05);color:var(--paper);}
+  #stepsTable td.arrow{color:var(--amber);font-size:13px;text-align:center;width:24px;}
+  #stepsTable td.idx{color:var(--muted);width:32px;}
 </style>
 </head>
 <body>
 <div id="app">
   <div id="toolbar">
-    <div id="title">OSLO POSTMAN ROUTE PLANNER <span>greedy route inspection</span></div>
+    <div id="titleRow">
+      <div id="title">OSLO POSTMAN ROUTE PLANNER <span>greedy route inspection</span></div>
+      <button id="btnCollapseBar" title="Hide controls">✕</button>
+    </div>
     <div id="buttons">
       <button class="tool active" id="btnPan">Pan / Zoom</button>
       <button class="tool" id="btnArea">Draw Area</button>
@@ -127,8 +180,21 @@
       <button class="tool" id="btnRun" disabled>Run</button>
       <button class="tool danger" id="btnReset">Reset</button>
     </div>
+    <div id="buttons2">
+      <button class="tool sub active" id="btnRectMode">▭ Rectangle</button>
+      <button class="tool sub" id="btnBrushMode">✏ Brush</button>
+      <button class="tool sub active" id="btnPaintMode" style="display:none;">Paint</button>
+      <button class="tool sub" id="btnEraseMode" style="display:none;">Erase</button>
+    </div>
+    <div id="buttons3">
+      <button class="tool sub" id="btnGPS">GPS</button>
+      <button class="tool sub" id="btnExport">Export</button>
+      <label class="tool sub" id="btnImportLabel">Import<input type="file" id="importFile" accept=".json" style="display:none;"></label>
+    </div>
     <div id="status">Loading street data…</div>
   </div>
+
+  <button id="btnReopenBar">☰ Controls</button>
 
   <div id="mapWrap">
     <svg id="map" viewBox="0 0 100 100" preserveAspectRatio="xMidYMid meet">
@@ -136,11 +202,15 @@
       <path id="selPath" d=""></path>
       <path id="dupPath" d=""></path>
       <rect id="selRect" x="0" y="0" width="0" height="0"></rect>
+      <circle id="brushCursor" r="0"></circle>
       <path id="routePath" d=""></path>
+      <circle id="gpsPulse" r="0"></circle>
+      <circle id="gpsMarker" r="5"></circle>
       <circle id="startMarker" r="5"></circle>
-      <circle id="playMarker" r="6"></circle>
+      <circle id="playMarker" r="9"></circle>
     </svg>
     <div id="hint">Draw an area, then set a start point, then hit Run.</div>
+    <div id="turnHud"><span id="turnHudArrow">↑</span><span id="turnHudText">Straight</span></div>
   </div>
 
   <div id="panel">
@@ -156,6 +226,15 @@
       <span id="speedLabel">speed</span>
       <input type="range" id="speedSlider" min="1" max="10" value="4">
     </div>
+    <div id="stepsSection">
+      <button id="stepsToggleBtn"><span id="stepsToggleLabel">Steps (0)</span><span class="chev" id="stepsChev">▾</span></button>
+      <div id="stepsTableWrap">
+        <table id="stepsTable">
+          <thead><tr><th>#</th><th></th><th>Turn</th></tr></thead>
+          <tbody id="stepsTableBody"></tbody>
+        </table>
+      </div>
+    </div>
   </div>
 </div>
 
@@ -163,11 +242,21 @@
 (async function(){
   "use strict";
 
+  const statusEl = document.getElementById('status');
+
   // ================= Load data =================
-  const raw = await (await fetch('oslo_data.json')).json();
+  let raw;
+  const REMOTE_DATA_URL = 'https://haidara-alt.github.io/Data-file/oslo_data.json';
+  try{
+    const resp = await fetch(REMOTE_DATA_URL);
+    if(!resp.ok) throw new Error('HTTP '+resp.status);
+    raw = await resp.json();
+  }catch(err){
+    statusEl.textContent = 'Could not load remote data ('+err.message+'), trying local file…';
+    raw = await (await fetch('oslo_data.json')).json();
+  }
   const nodes = raw.nodes;   // [lon, lat]
   const edges = raw.edges;   // [u, v, length, midGeom[[lon,lat],...]]
-  const statusEl = document.getElementById('status');
 
   // ================= Projection =================
   let lonMin=Infinity, lonMax=-Infinity, latMin=Infinity, latMax=-Infinity;
@@ -196,6 +285,35 @@
 
   const worldW = (lonMax-lonMin)*cosLat*SCALE;
   const worldH = (latMax-latMin)*SCALE;
+
+  // ================= Spatial grid (for brush queries) =================
+  const GRID_CELL = Math.max(worldW, worldH)/60 || 1;
+  const grid = new Map();
+  function gridKey(cx,cy){ return cx+'_'+cy; }
+  for (let i=0;i<nodes.length;i++){
+    const cx = Math.floor(px(i)/GRID_CELL), cy = Math.floor(py(i)/GRID_CELL);
+    const k = gridKey(cx,cy);
+    let arr = grid.get(k);
+    if(!arr){ arr=[]; grid.set(k,arr); }
+    arr.push(i);
+  }
+  function nodesNear(x,y,radius){
+    const result=[];
+    const minCx=Math.floor((x-radius)/GRID_CELL), maxCx=Math.floor((x+radius)/GRID_CELL);
+    const minCy=Math.floor((y-radius)/GRID_CELL), maxCy=Math.floor((y+radius)/GRID_CELL);
+    const r2=radius*radius;
+    for(let cx=minCx;cx<=maxCx;cx++){
+      for(let cy=minCy;cy<=maxCy;cy++){
+        const arr=grid.get(gridKey(cx,cy));
+        if(!arr) continue;
+        for(const i of arr){
+          const dx=px(i)-x, dy=py(i)-y;
+          if(dx*dx+dy*dy<=r2) result.push(i);
+        }
+      }
+    }
+    return result;
+  }
 
   // ================= Base map path =================
   const svg = document.getElementById('map');
@@ -233,12 +351,30 @@
   }
 
   let mode = 'pan'; // 'pan' | 'area' | 'start'
+  let areaShape = 'rect'; // 'rect' | 'brush'
+  let brushAction = 'paint'; // 'paint' | 'erase'
   const btnPan = document.getElementById('btnPan');
   const btnArea = document.getElementById('btnArea');
   const btnStart = document.getElementById('btnStart');
   const btnRun = document.getElementById('btnRun');
   const btnReset = document.getElementById('btnReset');
+  const btnRectMode = document.getElementById('btnRectMode');
+  const btnBrushMode = document.getElementById('btnBrushMode');
+  const btnPaintMode = document.getElementById('btnPaintMode');
+  const btnEraseMode = document.getElementById('btnEraseMode');
+  const btnGPS = document.getElementById('btnGPS');
+  const btnExport = document.getElementById('btnExport');
+  const importFileInput = document.getElementById('importFile');
   const hint = document.getElementById('hint');
+
+  function updateHint(){
+    if(mode==='pan') hint.textContent = 'Drag to pan, scroll/pinch to zoom.';
+    else if(mode==='area'){
+      if(areaShape==='rect') hint.textContent = 'Drag a rectangle over the area you want covered.';
+      else hint.textContent = brushAction==='paint' ? 'Paint over the streets you want covered.' : 'Drag over the streets you want to remove.';
+    }
+    else if(mode==='start') hint.textContent = 'Tap the street corner you want to start (and end) at.';
+  }
 
   function setMode(m){
     mode = m;
@@ -246,13 +382,33 @@
     if(m==='pan') btnPan.classList.add('active');
     if(m==='area') btnArea.classList.add('active');
     if(m==='start') btnStart.classList.add('active');
-    if(m==='pan') hint.textContent = 'Drag to pan, scroll/pinch to zoom.';
-    if(m==='area') hint.textContent = 'Drag a rectangle over the area you want covered.';
-    if(m==='start') hint.textContent = 'Tap the street corner you want to start (and end) at.';
+    updateHint();
   }
   btnPan.onclick = ()=>setMode('pan');
   btnArea.onclick = ()=>setMode('area');
   btnStart.onclick = ()=>{ if(!btnStart.disabled) setMode('start'); };
+
+  function setAreaShape(s){
+    areaShape = s;
+    if(s==='brush'){
+      brushNodeSet = selection ? new Set(selection.nodeSet) : new Set();
+    }
+    btnRectMode.classList.toggle('active', s==='rect');
+    btnBrushMode.classList.toggle('active', s==='brush');
+    btnPaintMode.style.display = s==='brush' ? '' : 'none';
+    btnEraseMode.style.display = s==='brush' ? '' : 'none';
+    updateHint();
+  }
+  function setBrushAction(a){
+    brushAction = a;
+    btnPaintMode.classList.toggle('active', a==='paint');
+    btnEraseMode.classList.toggle('active', a==='erase');
+    updateHint();
+  }
+  btnRectMode.onclick = ()=>setAreaShape('rect');
+  btnBrushMode.onclick = ()=>setAreaShape('brush');
+  btnPaintMode.onclick = ()=>setBrushAction('paint');
+  btnEraseMode.onclick = ()=>setBrushAction('erase');
 
   // ---- wheel zoom ----
   document.getElementById('mapWrap').addEventListener('wheel', function(e){
@@ -266,9 +422,47 @@
     applyVB();
   }, {passive:false});
 
-  // ---- pointer drag: pan / draw area / set start ----
+  // ---- pointer drag: pan / draw area (rect or brush) / set start ----
   let dragging=false, dragStartClient=null, dragStartVB=null, rectStartSVG=null;
+  let brushLastPoint=null;
   const selRectEl = document.getElementById('selRect');
+  const brushCursorEl = document.getElementById('brushCursor');
+
+  function brushRadiusSVG(){
+    const rect = svg.getBoundingClientRect();
+    return 26 * (vb.w/rect.width);
+  }
+  function applyBrushAt(x,y){
+    const r = brushRadiusSVG();
+    const near = nodesNear(x,y,r);
+    if(brushAction==='paint'){ near.forEach(i=>brushNodeSet.add(i)); }
+    else { near.forEach(i=>brushNodeSet.delete(i)); }
+    brushCursorEl.setAttribute('cx',x);
+    brushCursorEl.setAttribute('cy',y);
+    brushCursorEl.setAttribute('r',r);
+    brushCursorEl.style.display='block';
+    scheduleBrushUpdate();
+  }
+  function applyBrushSegment(p0,p1){
+    const dist = Math.hypot(p1.x-p0.x,p1.y-p0.y);
+    const r = brushRadiusSVG();
+    const step = Math.max(r*0.5, 0.0001);
+    const n = Math.max(1, Math.ceil(dist/step));
+    for(let i=0;i<=n;i++){
+      const t=i/n;
+      applyBrushAt(p0.x+(p1.x-p0.x)*t, p0.y+(p1.y-p0.y)*t);
+    }
+  }
+  let brushDirty=false;
+  function scheduleBrushUpdate(){
+    if(brushDirty) return;
+    brushDirty=true;
+    requestAnimationFrame(()=>{
+      brushDirty=false;
+      applySelectionNodeSet(new Set(brushNodeSet), null);
+      resetRun();
+    });
+  }
 
   svg.addEventListener('pointerdown', function(e){
     svg.setPointerCapture(e.pointerId);
@@ -276,11 +470,16 @@
     dragStartClient = {x:e.clientX, y:e.clientY};
     dragStartVB = {...vb};
     if (mode==='area'){
-      rectStartSVG = clientToSVG(e.clientX, e.clientY);
-      selRectEl.setAttribute('x', rectStartSVG.x);
-      selRectEl.setAttribute('y', rectStartSVG.y);
-      selRectEl.setAttribute('width', 0);
-      selRectEl.setAttribute('height', 0);
+      if(areaShape==='rect'){
+        rectStartSVG = clientToSVG(e.clientX, e.clientY);
+        selRectEl.setAttribute('x', rectStartSVG.x);
+        selRectEl.setAttribute('y', rectStartSVG.y);
+        selRectEl.setAttribute('width', 0);
+        selRectEl.setAttribute('height', 0);
+      } else {
+        brushLastPoint = clientToSVG(e.clientX, e.clientY);
+        applyBrushAt(brushLastPoint.x, brushLastPoint.y);
+      }
     }
   });
 
@@ -295,15 +494,21 @@
       vb.y = dragStartVB.y - dy;
       applyVB();
     } else if (mode==='area'){
-      const cur = clientToSVG(e.clientX, e.clientY);
-      const x = Math.min(rectStartSVG.x, cur.x);
-      const y = Math.min(rectStartSVG.y, cur.y);
-      const w = Math.abs(cur.x - rectStartSVG.x);
-      const h = Math.abs(cur.y - rectStartSVG.y);
-      selRectEl.setAttribute('x', x);
-      selRectEl.setAttribute('y', y);
-      selRectEl.setAttribute('width', w);
-      selRectEl.setAttribute('height', h);
+      if(areaShape==='rect'){
+        const cur = clientToSVG(e.clientX, e.clientY);
+        const x = Math.min(rectStartSVG.x, cur.x);
+        const y = Math.min(rectStartSVG.y, cur.y);
+        const w = Math.abs(cur.x - rectStartSVG.x);
+        const h = Math.abs(cur.y - rectStartSVG.y);
+        selRectEl.setAttribute('x', x);
+        selRectEl.setAttribute('y', y);
+        selRectEl.setAttribute('width', w);
+        selRectEl.setAttribute('height', h);
+      } else {
+        const cur = clientToSVG(e.clientX, e.clientY);
+        applyBrushSegment(brushLastPoint, cur);
+        brushLastPoint = cur;
+      }
     }
   });
 
@@ -311,7 +516,12 @@
     if(!dragging) return;
     dragging = false;
     if (mode==='area'){
-      finalizeAreaSelection();
+      if(areaShape==='rect'){
+        finalizeAreaSelection();
+      } else {
+        brushCursorEl.style.display='none';
+        resetRun();
+      }
     } else if (mode==='start'){
       const p = clientToSVG(e.clientX, e.clientY);
       pickStartNode(p.x, p.y);
@@ -348,7 +558,23 @@
 
   // ================= Area selection =================
   const selPathEl = document.getElementById('selPath');
-  let selection = null; // {lonMin,lonMax,latMin,latMax, nodeSet(Set), edgeList}
+  let selection = null; // {bbox, nodeSet(Set), edgeList}
+  let brushNodeSet = new Set();
+
+  function applySelectionNodeSet(nodeSet, bbox){
+    const edgeList = [];
+    for (const e of edges){
+      if (nodeSet.has(e[0]) && nodeSet.has(e[1])) edgeList.push(e);
+    }
+    selection = {bbox: bbox||null, nodeSet, edgeList};
+    let d = '';
+    for (const e of edgeList){
+      d += 'M'+px(e[0]).toFixed(1)+','+py(e[0]).toFixed(1)+' L'+px(e[1]).toFixed(1)+','+py(e[1]).toFixed(1)+' ';
+    }
+    selPathEl.setAttribute('d', d);
+    statusEl.textContent = `Selected ${nodeSet.size} intersections, ${edgeList.length} street segments.`;
+    btnStart.disabled = edgeList.length===0;
+  }
 
   function finalizeAreaSelection(){
     const x = parseFloat(selRectEl.getAttribute('x'));
@@ -367,21 +593,7 @@
       const [lon,lat] = nodes[i];
       if (lon>=bbox.lonMin && lon<=bbox.lonMax && lat>=bbox.latMin && lat<=bbox.latMax) nodeSet.add(i);
     }
-    const edgeList = [];
-    for (const e of edges){
-      if (nodeSet.has(e[0]) && nodeSet.has(e[1])) edgeList.push(e);
-    }
-    selection = {bbox, nodeSet, edgeList};
-
-    // draw selected streets highlighted
-    let d = '';
-    for (const e of edgeList){
-      d += 'M'+px(e[0]).toFixed(1)+','+py(e[0]).toFixed(1)+' L'+px(e[1]).toFixed(1)+','+py(e[1]).toFixed(1)+' ';
-    }
-    selPathEl.setAttribute('d', d);
-
-    statusEl.textContent = `Selected ${nodeSet.size} intersections, ${edgeList.length} street segments.`;
-    btnStart.disabled = false;
+    applySelectionNodeSet(nodeSet, bbox);
     resetRun();
     setMode('start');
   }
@@ -413,11 +625,13 @@
     document.getElementById('routePath').setAttribute('d','');
     document.getElementById('playMarker').style.display='none';
     document.getElementById('panel').classList.remove('open');
+    document.getElementById('turnHud').style.display='none';
     pauseAnim();
+    lastResult = null;
     btnRun.disabled = !(selection && startNode!==null);
   }
   btnReset.onclick = function(){
-    selection = null; startNode = null;
+    selection = null; startNode = null; brushNodeSet = new Set();
     selPathEl.setAttribute('d','');
     startMarkerEl.style.display='none';
     btnStart.disabled = true; btnRun.disabled = true;
@@ -633,10 +847,57 @@
     showResult(res);
   };
 
+  // ================= Directions (left/right/straight/u-turn) =================
+  function bearing(a,b){ return Math.atan2(py(b)-py(a), px(b)-px(a)); }
+  function normDeg(d){ d = d%360; if(d>180) d-=360; if(d<=-180) d+=360; return d; }
+  function computeDirections(circuit){
+    const n = circuit.length-1;
+    const dirs = new Array(n).fill('Straight');
+    if(n>0) dirs[0] = 'Start';
+    for(let i=1;i<n;i++){
+      const h1 = bearing(circuit[i-1],circuit[i])*180/Math.PI;
+      const h2 = bearing(circuit[i],circuit[i+1])*180/Math.PI;
+      const turn = normDeg(h2-h1);
+      let dir;
+      if(Math.abs(turn)>150) dir='U-turn';
+      else if(turn>20) dir='Right';
+      else if(turn<-20) dir='Left';
+      else dir='Straight';
+      dirs[i]=dir;
+    }
+    return dirs;
+  }
+  const ARROW_MAP = {Start:'●', Straight:'↑', Left:'←', Right:'→', 'U-turn':'↩'};
+
+  const stepsToggleBtn = document.getElementById('stepsToggleBtn');
+  const stepsToggleLabel = document.getElementById('stepsToggleLabel');
+  const stepsChev = document.getElementById('stepsChev');
+  const stepsTableWrap = document.getElementById('stepsTableWrap');
+  const stepsTableBody = document.getElementById('stepsTableBody');
+  let stepsOpen = false;
+  stepsToggleBtn.onclick = function(){
+    stepsOpen = !stepsOpen;
+    stepsTableWrap.classList.toggle('open', stepsOpen);
+    stepsChev.textContent = stepsOpen ? '▲' : '▾';
+  };
+
+  let currentDirections = [];
+  function renderStepsTable(dirs){
+    currentDirections = dirs;
+    let rows = '';
+    for(let i=0;i<dirs.length;i++){
+      rows += '<tr><td class="idx">'+(i+1)+'</td><td class="arrow">'+ARROW_MAP[dirs[i]]+'</td><td>'+dirs[i]+'</td></tr>';
+    }
+    stepsTableBody.innerHTML = rows;
+    stepsToggleLabel.textContent = 'Steps ('+dirs.length+')';
+  }
+
   // ================= Show result =================
   let currentCircuit = null;
+  let lastResult = null;
   function showResult(res){
     currentCircuit = res.circuit;
+    lastResult = res;
 
     // draw duplicated (deadhead) edges in amber
     const dupSet = new Set(res.dupEdges);
@@ -663,16 +924,21 @@
     document.getElementById('statOverhead').textContent = (res.addedLength/res.totalStreets*100).toFixed(0)+'%';
     document.getElementById('panel').classList.add('open');
 
+    renderStepsTable(computeDirections(currentCircuit));
     setupAnim(routeEl);
   }
 
   // ================= Playback animation =================
   let animLen=0, animRAF=null, animStart=null, animElapsed=0, playing=false;
+  let edgeCum=[];
   const routeEl0 = document.getElementById('routePath');
   const playMarker = document.getElementById('playMarker');
   const playBtn = document.getElementById('playBtn');
   const progressBar = document.getElementById('progressBar');
   const speedSlider = document.getElementById('speedSlider');
+  const turnHud = document.getElementById('turnHud');
+  const turnHudArrow = document.getElementById('turnHudArrow');
+  const turnHudText = document.getElementById('turnHudText');
 
   function setupAnim(pathEl){
     animLen = pathEl.getTotalLength();
@@ -686,6 +952,30 @@
     playMarker.setAttribute('cx', start.x);
     playMarker.setAttribute('cy', start.y);
     progressBar.style.width = '0%';
+    turnHud.style.display = 'none';
+
+    edgeCum = [0];
+    for(let i=0;i<currentCircuit.length-1;i++){
+      const dx = px(currentCircuit[i+1])-px(currentCircuit[i]);
+      const dy = py(currentCircuit[i+1])-py(currentCircuit[i]);
+      edgeCum.push(edgeCum[edgeCum.length-1] + Math.hypot(dx,dy));
+    }
+  }
+
+  function currentEdgeIndex(dist){
+    let lo=0, hi=edgeCum.length-1;
+    while(lo<hi){
+      const mid=(lo+hi+1)>>1;
+      if(edgeCum[mid]<=dist) lo=mid; else hi=mid-1;
+    }
+    return Math.min(lo, Math.max(currentDirections.length-1,0));
+  }
+
+  function updateTurnHud(dir){
+    if(!dir) return;
+    turnHud.style.display = 'flex';
+    turnHudArrow.textContent = ARROW_MAP[dir] || '↑';
+    turnHudText.textContent = dir;
   }
 
   function pauseAnim(){
@@ -696,8 +986,9 @@
 
   function speedKmPerSec(){
     // slider 1-10 -> 0.3 to 6 km/s (through a synthetic route, for demo pacing)
+    // slowed down 20x from the original pacing
     const v = parseInt(speedSlider.value,10);
-    return 0.3 + (v-1) * 0.63;
+    return (0.3 + (v-1) * 0.63) / 20;
   }
 
   function tick(ts){
@@ -711,6 +1002,9 @@
     playMarker.setAttribute('cx', pt.x);
     playMarker.setAttribute('cy', pt.y);
     progressBar.style.width = (dist/animLen*100)+'%';
+    if(currentDirections.length){
+      updateTurnHud(currentDirections[currentEdgeIndex(dist)]);
+    }
     if (dist >= animLen){
       playing = false;
       playBtn.textContent = '▶';
@@ -735,6 +1029,127 @@
     }
   };
 
+  // ================= Export / Import route =================
+  function exportRoute(){
+    if(!selection || startNode===null){
+      statusEl.textContent = 'Nothing to export yet — select an area and start point first.';
+      return;
+    }
+    const data = {
+      type:'oslo-postman-route', version:1,
+      selectionNodeSet:[...selection.nodeSet],
+      selectionEdgeList: selection.edgeList,
+      startNode: startNode,
+      result: lastResult ? {
+        circuit: lastResult.circuit,
+        totalStreets: lastResult.totalStreets,
+        totalRoute: lastResult.totalRoute,
+        addedLength: lastResult.addedLength,
+        stepCount: lastResult.stepCount,
+        dupEdges: lastResult.dupEdges
+      } : null
+    };
+    const blob = new Blob([JSON.stringify(data)], {type:'application/json'});
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url; a.download = 'oslo-route-'+Date.now()+'.json';
+    document.body.appendChild(a); a.click(); document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+    statusEl.textContent = 'Route exported.';
+  }
+  btnExport.onclick = exportRoute;
+
+  importFileInput.addEventListener('change', function(e){
+    const file = e.target.files[0];
+    if(!file) return;
+    const reader = new FileReader();
+    reader.onload = function(ev){
+      try{
+        const data = JSON.parse(ev.target.result);
+        if(data.type!=='oslo-postman-route') throw new Error('not a route file');
+        const nodeSet = new Set(data.selectionNodeSet);
+        selection = {bbox:null, nodeSet, edgeList:data.selectionEdgeList};
+        brushNodeSet = new Set(nodeSet);
+        let d='';
+        for(const e2 of selection.edgeList){
+          d += 'M'+px(e2[0]).toFixed(1)+','+py(e2[0]).toFixed(1)+' L'+px(e2[1]).toFixed(1)+','+py(e2[1]).toFixed(1)+' ';
+        }
+        selPathEl.setAttribute('d', d);
+        btnStart.disabled = false;
+        startNode = data.startNode;
+        startMarkerEl.setAttribute('cx', px(startNode));
+        startMarkerEl.setAttribute('cy', py(startNode));
+        startMarkerEl.style.display='block';
+        btnRun.disabled = false;
+        if(data.result){
+          showResult(data.result);
+          statusEl.textContent = 'Route imported and loaded.';
+        } else {
+          statusEl.textContent = 'Selection imported. Hit Run to compute the route.';
+        }
+        setMode('pan');
+      }catch(err){
+        statusEl.textContent = 'Could not import file: '+err.message;
+      }
+      importFileInput.value='';
+    };
+    reader.readAsText(file);
+  });
+
+  // ================= Live GPS location =================
+  const gpsMarkerEl = document.getElementById('gpsMarker');
+  const gpsPulseEl = document.getElementById('gpsPulse');
+  let gpsWatchId = null;
+  function toggleGPS(){
+    if(gpsWatchId!==null){
+      navigator.geolocation.clearWatch(gpsWatchId);
+      gpsWatchId = null;
+      gpsMarkerEl.style.display='none';
+      gpsPulseEl.style.display='none';
+      btnGPS.classList.remove('active');
+      btnGPS.textContent='GPS';
+      return;
+    }
+    if(!navigator.geolocation){
+      statusEl.textContent = 'Geolocation not supported on this device.';
+      return;
+    }
+    btnGPS.textContent='GPS…';
+    gpsWatchId = navigator.geolocation.watchPosition(function(pos){
+      const {longitude, latitude} = pos.coords;
+      const p = proj(longitude, latitude);
+      gpsMarkerEl.setAttribute('cx', p[0]);
+      gpsMarkerEl.setAttribute('cy', p[1]);
+      gpsPulseEl.setAttribute('cx', p[0]);
+      gpsPulseEl.setAttribute('cy', p[1]);
+      gpsPulseEl.setAttribute('r', Math.max(worldW,worldH)*0.004);
+      gpsMarkerEl.style.display='block';
+      gpsPulseEl.style.display='block';
+      btnGPS.classList.add('active');
+      btnGPS.textContent='GPS ●';
+    }, function(err){
+      statusEl.textContent = 'Location error: '+err.message;
+      btnGPS.textContent='GPS';
+    }, {enableHighAccuracy:true, maximumAge:2000, timeout:15000});
+  }
+  btnGPS.onclick = toggleGPS;
+
+  // ================= Toolbar collapse / reopen =================
+  const toolbarEl = document.getElementById('toolbar');
+  const btnCollapseBar = document.getElementById('btnCollapseBar');
+  const btnReopenBar = document.getElementById('btnReopenBar');
+  btnCollapseBar.onclick = function(){
+    toolbarEl.style.display = 'none';
+    btnReopenBar.style.display = 'block';
+  };
+  btnReopenBar.onclick = function(){
+    toolbarEl.style.display = 'flex';
+    btnReopenBar.style.display = 'none';
+  };
+
+  setAreaShape('rect');
+  setBrushAction('paint');
+  setMode('pan');
   statusEl.textContent = `Loaded ${nodes.length} intersections, ${edges.length} street segments across Oslo. Draw an area to begin.`;
 })();
 </script>
